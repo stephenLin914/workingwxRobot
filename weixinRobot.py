@@ -10,7 +10,8 @@ import time
 import sys
 
 WXROBOTKEY = '0aec9772-9770-46ac-9a17-04bb58a18e5e'
-HEFENGAPI = 'https://devapi.qweather.com/v7/weather/now?'
+HEFENGNOWAPI = 'https://devapi.qweather.com/v7/weather/now?'
+HEFENGTHREEDAYAPI = 'https://devapi.qweather.com/v7/weather/3d?'
 HEFENGKEY = '81ab769e12c743348b233a2f45bdceec'
 HOLIDAYAPI = 'http://v.juhe.cn/calendar/month?'
 CALENDARAPI = 'http://v.juhe.cn/calendar/day?'
@@ -45,7 +46,10 @@ workingDaySet = set()
 
 def log(tag, **kw):
     t = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))
-    print(t+'   ', tag + "   :   ", "info:", kw)
+    if( len(kw) > 0 ):
+        print('%-25s%-20s:  %s' % (t, tag, kw))
+    else:
+        print('%-25s%-20s:' % (t, tag))
 
 
 def formatCalendarDay(dayStr):
@@ -64,7 +68,9 @@ def updateWorkingDay():
     today = time.strftime('%Y-%m')
     if( today[-2]=='0' ):
         today = today[:-2] + today[-1:]
-    recentHolidayRes = requests.get(HOLIDAYAPI + 'year-month=' + today + '&key=' + CALENDARKEY)
+    url = HOLIDAYAPI + 'year-month=' + today + '&key=' + CALENDARKEY
+    log(sys._getframe().f_code.co_name, url=url)
+    recentHolidayRes = requests.get(url)
     if( recentHolidayRes.json()['reason']=='Success' ):
         holidayArray = recentHolidayRes.json()['result']['data']['holiday_array']
         for hol in holidayArray:
@@ -83,53 +89,102 @@ def getCalendarInfo():
         today = today[:-5] + today[-4:]
     if( today[-2]=='0' ):
         today = today[:-2] + today[-1:]
-    calendarRes = requests.get(CALENDARAPI + 'date=' + today + '&key=' + CALENDARKEY)
-    if( recentHolidayRes.json()['reason']=='Success' ):
-        holidayInfo = recentHolidayRes.json()['result']['data']['holiday']
-        if( holidayInfo!='' ):
-            log(sys._getframe().f_code.co_name, holiday=holidayInfo)
-            remindaHoliday(holidayInfo)
+    url = CALENDARAPI + 'date=' + today + '&key=' + CALENDARKEY
+    log(sys._getframe().f_code.co_name, url=url)
+    calendarRes = requests.get(url)
+    if( calendarRes.json()['reason']=='Success' ):
+        try:
+            holidayInfo = calendarRes.json()['result']['data']['holiday']
+            if( holidayInfo!='' ):
+                log(sys._getframe().f_code.co_name, holiday=holidayInfo)
+                remindaHoliday(holidayInfo)
+        except KeyError:
+            log(sys._getframe().f_code.co_name, date=today, error=KeyError)
 
-def weatherInfoFormat(resJson):
+def addWeatherIcon(weatherText):
+    weather = ''
+    if ( weatherText=='晴' ):
+        weather = weatherText + '☀'
+    elif( weatherText=='多云' ):
+        weather = weatherText + '⛅'
+    elif( weatherText=='阴' ):
+        weather = weatherText + '☁'
+    elif( ('雨' in weatherText) and ('雪' not in weatherText) ):
+        weather = weatherText + '🌧'
+    elif( weatherText=='雾' ):
+        weather = weatherText + '🌫'
+    elif( weatherText=='霾' ):
+        weather = weatherText + '🌫🌫'
+    elif( '雪' in weatherText ):
+        weather = weatherText + '❄'
+    else:
+        weather = weatherText
+    return weather
+
+def weatherTodayInfoFormat(resJson):
     weather = ''
     needUmbrella = False
-    if ( resJson['text']=='晴' ):
-        weather = resJson['text'] + '☀'
-    elif( resJson['text']=='多云' ):
-        weather = resJson['text'] + '⛅'
-    elif( resJson['text']=='阴' ):
-        weather = resJson['text'] + '☁'
-    elif( '雨' in resJson['text'] ):
+    weatherOfToday = resJson[0]
+    textDay = weatherOfToday['textDay']
+    textNight = weatherOfToday['textNight']
+    tempMax = weatherOfToday['tempMax']
+    tempMin = weatherOfToday['tempMin']
+    windDirDay = weatherOfToday['windDirDay']
+    windScaleDay = weatherOfToday['windScaleDay']
+    humidity = weatherOfToday['humidity']
+    if( ('雨' in textDay) or ('雨' in textNight) ):
         needUmbrella = True
-        weather = resJson['text'] + '🌧'
-    elif( resJson['text']=='雾' ):
-        weather = resJson['text'] + '🌫'
-    elif( resJson['text']=='霾' ):
-        weather = resJson['text'] + '🌫🌫'
+    daySummary = ''
+    if( textDay != textNight ):
+        daySummary = addWeatherIcon(textDay) + '转' + addWeatherIcon(textNight) + '\n'
     else:
-        weather = resJson['text']
-    msg = weather + '\n空气温度:' + resJson['temp'] + '°C\n体表温度：' + resJson['feelsLike'] + '°C\n' + resJson['windDir'] + resJson['windScale'] + '级，相对湿度：' + resJson['humidity'] + '%。'
+        daySummary = addWeatherIcon(textDay)
+    dayTemp = '温度：' + tempMin + '°C ~ ' + tempMax + '°C\n'
+    dayWindAndHumidity = windDirDay + windScaleDay + '级， 相对湿度：' + humidity + '%\n'
+    msg = '全天：\n' + daySummary + dayTemp + dayWindAndHumidity
     if( needUmbrella ):
-        msg + '\n今天可能会下雨，出门记得带伞哦！'
+        msg = msg + '今天可能会下雨，出门记得带伞☔哦！'
     return msg
 
 def weatherInfo():
-    shanghaiWeather = ''
-    wuxiWeather = ''
-    shanghaiResponse = requests.get(HEFENGAPI + 'location=101020100&key=' + HEFENGKEY)
-    if( shanghaiResponse.json()['code']=='200' ):
-        shanghaiResponseNow = shanghaiResponse.json()['now']
-        shanghaiWeather = '当前上海市天气状况为：\n' +  weatherInfoFormat(shanghaiResponseNow)
-    wuxiWeatherResponse = requests.get(HEFENGAPI + 'location=101190201&key=' + HEFENGKEY)
-    if( wuxiWeatherResponse.json()['code']=='200' ):
-        wuxiResponseNow = wuxiWeatherResponse.json()['now']
-        wuxiWeather = '当前无锡市天气状况为：\n' +  weatherInfoFormat(wuxiResponseNow)
+    shanghaiWeather = '上海市实时天气状况：'
+    wuxiWeather = '无锡市实时天气状况：'
+    shanghaiNowWeather = ''
+    wuxiNowWeather = ''
+    shanghaiTodayWeather = ''
+    wuxiTodayWeather = ''
+    shNowUrl = HEFENGNOWAPI + 'location=101020100&key=' + HEFENGKEY
+    shanghaiWeatherNowRes = requests.get(shNowUrl)
+    shThreedayUrl = HEFENGTHREEDAYAPI + 'location=101020100&key=' + HEFENGKEY
+    shanghaiWeatherThreedayRes = requests.get(shThreedayUrl)
+    log(sys._getframe().f_code.co_name, shNowUrl=shNowUrl, shThreedayUrl=shThreedayUrl)
+    if( shanghaiWeatherNowRes.json()['code']=='200' ):
+        shanghaiResponseNow = shanghaiWeatherNowRes.json()['now']
+        shanghaiNowWeather = addWeatherIcon(shanghaiResponseNow['text']) + '\n'
+    if( shanghaiWeatherThreedayRes.json()['code']=='200' ):
+        shanghaiResponseDaily = shanghaiWeatherThreedayRes.json()['daily']
+        shanghaiTodayWeather = weatherTodayInfoFormat(shanghaiResponseDaily)
+    shanghaiWeather = shanghaiWeather + shanghaiNowWeather + shanghaiTodayWeather
+    log(sys._getframe().f_code.co_name, shanghaiWeather=shanghaiWeather)
+
+    wxNowUrl = HEFENGNOWAPI + 'location=101190201&key=' + HEFENGKEY
+    wuxiWeatherNowRes = requests.get(wxNowUrl)
+    wxThreedayUrl = HEFENGTHREEDAYAPI + 'location=101190201&key=' + HEFENGKEY
+    wuxiWeatherThreedayRes = requests.get(wxThreedayUrl)
+    log(sys._getframe().f_code.co_name, wxNowUrl=wxNowUrl, wxThreedayUrl=wxThreedayUrl)
+    if( wuxiWeatherNowRes.json()['code']=='200' ):
+        wuxiResponseNow = wuxiWeatherNowRes.json()['now']
+        wuxiNowWeather = addWeatherIcon(wuxiResponseNow['text']) + '\n'
+    if( wuxiWeatherThreedayRes.json()['code']=='200' ):
+        wuxiResponseDaily = wuxiWeatherThreedayRes.json()['daily']
+        wuxiTodayWeather = weatherTodayInfoFormat(wuxiResponseDaily)
+    wuxiWeather = wuxiWeather + wuxiNowWeather + wuxiTodayWeather
+    log(sys._getframe().f_code.co_name, wuxiWeather=wuxiWeather)
     return shanghaiWeather + '\n\n' + wuxiWeather
 
 def sendWeatherMsg():
     log(sys._getframe().f_code.co_name)
     weatherMsg = weatherInfo()
-    # print(weatherMsg)
     rbt.send_text(content=weatherMsg)
 
 def alarmRemind():
