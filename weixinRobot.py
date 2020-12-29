@@ -153,9 +153,11 @@ def weatherInfo():
     wuxiNowWeather = ''
     shanghaiTodayWeather = ''
     wuxiTodayWeather = ''
-    shNowUrl = HEFENGNOWAPI + 'location=101020100&key=' + HEFENGKEY
+    shCityId = '101020100'
+    wxCityId = '101190201'
+    shNowUrl = HEFENGNOWAPI + 'location=' + shCityId + '&key=' + HEFENGKEY
     shanghaiWeatherNowRes = requests.get(shNowUrl)
-    shThreedayUrl = HEFENGTHREEDAYAPI + 'location=101020100&key=' + HEFENGKEY
+    shThreedayUrl = HEFENGTHREEDAYAPI + 'location=' + shCityId + '&key=' + HEFENGKEY
     shanghaiWeatherThreedayRes = requests.get(shThreedayUrl)
     log(sys._getframe().f_code.co_name, shNowUrl=shNowUrl, shThreedayUrl=shThreedayUrl)
     if( shanghaiWeatherNowRes.json()['code']=='200' ):
@@ -167,9 +169,9 @@ def weatherInfo():
     shanghaiWeather = shanghaiWeather + shanghaiNowWeather + shanghaiTodayWeather
     log(sys._getframe().f_code.co_name, shanghaiWeather=shanghaiWeather)
 
-    wxNowUrl = HEFENGNOWAPI + 'location=101190201&key=' + HEFENGKEY
+    wxNowUrl = HEFENGNOWAPI + 'location=' + wxCityId + '&key=' + HEFENGKEY
     wuxiWeatherNowRes = requests.get(wxNowUrl)
-    wxThreedayUrl = HEFENGTHREEDAYAPI + 'location=101190201&key=' + HEFENGKEY
+    wxThreedayUrl = HEFENGTHREEDAYAPI + 'location=' + wxCityId + '&key=' + HEFENGKEY
     wuxiWeatherThreedayRes = requests.get(wxThreedayUrl)
     log(sys._getframe().f_code.co_name, wxNowUrl=wxNowUrl, wxThreedayUrl=wxThreedayUrl)
     if( wuxiWeatherNowRes.json()['code']=='200' ):
@@ -185,7 +187,7 @@ def weatherInfo():
 def sendWeatherMsg():
     log(sys._getframe().f_code.co_name)
     weatherMsg = weatherInfo()
-    rbt.send_text(content=weatherMsg)
+    # rbt.send_text(content=weatherMsg)
 
 def alarmRemind():
     log(sys._getframe().f_code.co_name)
@@ -203,4 +205,5 @@ def main():
     sched.start()
 
 if __name__=="__main__":
-    main()
+    sendWeatherMsg()
+    # main()
